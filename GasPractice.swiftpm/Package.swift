@@ -8,7 +8,7 @@ let package = Package(
     products: [.iOSApplication(
         name: "가스기사 연습실", targets: ["AppModule"],
         bundleIdentifier: "com.gaspractice.personal.ipad",
-        displayVersion: "0.2", bundleVersion: "2",
+        displayVersion: "0.3", bundleVersion: "3",
         appIcon: .placeholder(icon: .pencil), accentColor: .presetColor(.green),
         supportedDeviceFamilies: [.pad],
         supportedInterfaceOrientations: [.portrait, .portraitUpsideDown, .landscapeLeft, .landscapeRight]

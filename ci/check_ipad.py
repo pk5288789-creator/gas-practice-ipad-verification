@@ -29,16 +29,32 @@ HARNESS = r'''
                 return
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-                let check = "JSON.stringify({id:q().id, visible:!document.getElementById('study').hidden, prompt:document.getElementById('questionText').innerText})"
+                let check = "JSON.stringify({id:q().id, visible:!document.getElementById('study').hidden, prompt:document.getElementById('questionText').innerText, webInkHidden:getComputedStyle(document.querySelector('.canvas-wrap')).display==='none', memoVisible:document.getElementById('typed').getBoundingClientRect().height>0, completeVisible:document.getElementById('complete').getBoundingClientRect().height>0})"
                 webView.evaluateJavaScript(check) { value, error in
                     let text = value as? String ?? "{}"
                     let data = text.data(using: .utf8) ?? Data()
                     let result = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
                     let native = NativeChecks.run()
-                    let ok = error == nil && self.currentID != nil && self.currentID == result["id"] as? String
+                    self.canvas.tool = PKEraserTool(.bitmap, width: 48)
+                    self.showHover(at: CGPoint(x: 100, y: 120))
+                    let hoverOK = !self.hoverTip.isHidden && abs(self.hoverTip.bounds.width - 48 * self.canvas.zoomScale) < 0.1
+                        && !self.hoverTip.isUserInteractionEnabled && self.hoverTip.center == CGPoint(x: 100, y: 120)
+                    self.canvas.tool = self.pen; self.updateToolStatus()
+                    let ok = hoverOK && !self.notebook.isHidden && self.toolButtons.count == 7
+                        && result["webInkHidden"] as? Bool == true
+                        && result["memoVisible"] as? Bool == true && result["completeVisible"] as? Bool == true
+                        && error == nil && self.currentID != nil && self.currentID == result["id"] as? String
                         && result["visible"] as? Bool == true && !(result["prompt"] as? String ?? "").isEmpty
                         && self.canvas.isUserInteractionEnabled && native.hasPrefix("내부 확인 통과")
-                    self.writeSmoke(ok, detail: text + "\n" + native + "\n" + (error?.localizedDescription ?? ""))
+                    let portrait = UIGraphicsImageRenderer(bounds: self.view.bounds).image { _ in
+                        self.view.drawHierarchy(in: self.view.bounds, afterScreenUpdates: true)
+                    }
+                    try? portrait.pngData()?.write(to: URL.documentsDirectory.appendingPathComponent("portrait.png"))
+                    self.view.window?.windowScene?.requestGeometryUpdate(.iOS(interfaceOrientations: .landscapeLeft))
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                        let landscapeOK = self.stack.axis == .horizontal && self.canvasHost.bounds.width > 300
+                        self.writeSmoke(ok && landscapeOK, detail: text + "\n" + native + "\nHover geometry, single notebook, memo/completion, portrait/landscape layout checked. " + (error?.localizedDescription ?? ""))
+                    }
                 }
             }
         }
@@ -80,7 +96,7 @@ def prepare():
     with (APP / 'Info.plist').open('wb') as file:
         plistlib.dump({'CFBundleIdentifier':BUNDLE, 'CFBundleExecutable':'GasPractice',
             'CFBundleName':'GasPractice', 'CFBundlePackageType':'APPL',
-            'CFBundleVersion':'2', 'CFBundleShortVersionString':'0.2',
+            'CFBundleVersion':'3', 'CFBundleShortVersionString':'0.3',
             'MinimumOSVersion':'17.5', 'UIDeviceFamily':[2],
             'UILaunchScreen':{}, 'UISupportedInterfaceOrientations':[
                 'UIInterfaceOrientationPortrait','UIInterfaceOrientationLandscapeLeft',
@@ -120,6 +136,7 @@ def main():
     if not report.exists():
         raise RuntimeError('App did not produce an execution result within 90 seconds.')
     shutil.copy2(report, OUT/'result.json')
+    shutil.copy2(container/'Documents'/'portrait.png', OUT/'portrait.png')
     result = json.loads(report.read_text())
     if not result.get('passed'):
         raise RuntimeError(result)

@@ -10,6 +10,8 @@ final class PracticeController: UIViewController, WKScriptMessageHandler, WKNavi
     private let canvas = PKCanvasView()
     private let stack = UIStackView(), notebook = UIStackView(), tools = UIStackView()
     private let heading = UILabel(), status = UILabel()
+    private let canvasHost = UIView(), hoverTip = UIView()
+    private var toolButtons = [String: UIButton]()
     private var splitConstraint: NSLayoutConstraint?
     private var currentID: String?, beforeStroke: PKDrawing?
     private var undoHistory = [PKDrawing](), redoHistory = [PKDrawing]()
@@ -22,6 +24,8 @@ final class PracticeController: UIViewController, WKScriptMessageHandler, WKNavi
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        overrideUserInterfaceStyle = .light
+        view.tintColor = UIColor(red: 0.16, green: 0.34, blue: 0.65, alpha: 1)
         view.backgroundColor = .systemBackground
         do {
             if FileManager.default.fileExists(atPath: storeURL.path) {
@@ -44,8 +48,12 @@ final class PracticeController: UIViewController, WKScriptMessageHandler, WKNavi
             stack.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
             stack.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor)
         ])
-        notebook.axis = .vertical; notebook.spacing = 6
-        heading.numberOfLines = 3; heading.font = .preferredFont(forTextStyle: .subheadline)
+        notebook.axis = .vertical; notebook.spacing = 8
+        notebook.isLayoutMarginsRelativeArrangement = true
+        notebook.layoutMargins = UIEdgeInsets(top: 16, left: 12, bottom: 12, right: 12)
+        notebook.backgroundColor = UIColor(red: 0.95, green: 0.96, blue: 0.98, alpha: 1)
+        notebook.isHidden = true
+        heading.numberOfLines = 1; heading.font = .systemFont(ofSize: 17, weight: .semibold)
         heading.text = "회차와 문제를 선택하면 필기장이 열립니다."
         status.font = .preferredFont(forTextStyle: .caption1); status.textColor = .secondaryLabel
         tools.axis = .horizontal; tools.spacing = 6
@@ -64,22 +72,33 @@ final class PracticeController: UIViewController, WKScriptMessageHandler, WKNavi
         button("색") { [weak self] in self?.showColors() }
         button("↶") { [weak self] in self?.undoInk() }
         button("↷") { [weak self] in self?.redoInk() }
-        button("전체 지우기") { [weak self] in self?.clearInk() }
-        button("필기 백업") { [weak self] in self?.exportInk() }
-        button("가져오기") { [weak self] in self?.importInk() }
-        button("입력 확인") { [weak self] in self?.showDiagnostics() }
+        button("더 보기") { [weak self] in self?.showMore() }
         canvas.delegate = self; canvas.tool = pen; canvas.drawingPolicy = .pencilOnly
-        canvas.backgroundColor = UIColor(red: 0.98, green: 0.98, blue: 0.95, alpha: 1)
+        canvas.backgroundColor = .white
         canvas.contentSize = CGSize(width: 1600, height: 2400)
         canvas.minimumZoomScale = 0.25; canvas.maximumZoomScale = 2
         canvas.bouncesZoom = true; canvas.isUserInteractionEnabled = false
         let pencil = UIPencilInteraction(); pencil.delegate = self; canvas.addInteraction(pencil)
         notebook.addArrangedSubview(heading); notebook.addArrangedSubview(row)
-        notebook.addArrangedSubview(status); notebook.addArrangedSubview(canvas)
+        canvasHost.layer.cornerRadius = 16; canvasHost.clipsToBounds = true
+        canvasHost.layer.borderWidth = 1; canvasHost.layer.borderColor = UIColor.systemGray5.cgColor
+        canvasHost.addSubview(canvas); canvas.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            canvas.leadingAnchor.constraint(equalTo: canvasHost.leadingAnchor),
+            canvas.trailingAnchor.constraint(equalTo: canvasHost.trailingAnchor),
+            canvas.topAnchor.constraint(equalTo: canvasHost.topAnchor),
+            canvas.bottomAnchor.constraint(equalTo: canvasHost.bottomAnchor)
+        ])
+        hoverTip.isUserInteractionEnabled = false; hoverTip.isHidden = true
+        hoverTip.layer.borderWidth = 1.5; canvasHost.addSubview(hoverTip)
+        let hover = UIHoverGestureRecognizer(target: self, action: #selector(pencilHover(_:)))
+        hover.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.pencil.rawValue)]
+        hover.cancelsTouchesInView = false; canvas.addGestureRecognizer(hover)
+        notebook.addArrangedSubview(status); notebook.addArrangedSubview(canvasHost)
         stack.addArrangedSubview(web); stack.addArrangedSubview(notebook)
         if let index = WebResources.indexURL() {
             web.loadFileURL(index, allowingReadAccessTo: index.deletingLastPathComponent())
-        } else { report("앱 0.2: 문제 자료를 찾지 못했습니다. 웹사이트에서 학습할 수 있습니다. 기존 프로젝트와 필기는 삭제하지 마세요.") }
+        } else { report("앱 0.3: 문제 자료를 찾지 못했습니다. 웹사이트에서 학습할 수 있습니다. 기존 프로젝트와 필기는 삭제하지 마세요.") }
         if !storageReady { report("저장된 필기를 읽지 못했습니다. 원본 보호를 위해 새 필기를 중지했습니다. 파일을 삭제하지 말고 오류를 알려주세요.") }
     }
 
@@ -87,19 +106,65 @@ final class PracticeController: UIViewController, WKScriptMessageHandler, WKNavi
         super.viewDidLayoutSubviews()
         let landscape = view.bounds.width > view.bounds.height
         let axis: NSLayoutConstraint.Axis = landscape ? .horizontal : .vertical
+        if currentID == nil {
+            splitConstraint?.isActive = false; splitConstraint = nil
+            return
+        }
         if splitConstraint == nil || stack.axis != axis {
             splitConstraint?.isActive = false; stack.axis = axis
-            splitConstraint = landscape ? web.widthAnchor.constraint(equalTo: stack.widthAnchor, multiplier: 0.5, constant: -4) : web.heightAnchor.constraint(equalTo: stack.heightAnchor, multiplier: 0.42, constant: -4)
+            splitConstraint = landscape ? web.widthAnchor.constraint(equalTo: stack.widthAnchor, multiplier: 0.44, constant: -4) : web.heightAnchor.constraint(equalTo: stack.heightAnchor, multiplier: 0.40, constant: -4)
             splitConstraint?.isActive = true
         }
     }
 
     private func button(_ title: String, action: @escaping () -> Void) {
-        let b = UIButton(type: .system); b.configuration = .bordered(); b.setTitle(title, for: .normal)
+        let symbols = ["펜":"pencil.tip", "지우개":"eraser", "굵기":"lineweight", "색":"paintpalette", "↶":"arrow.uturn.backward", "↷":"arrow.uturn.forward", "더 보기":"ellipsis"]
+        let b = UIButton(type: .system)
+        var config = UIButton.Configuration.plain()
+        config.image = UIImage(systemName: symbols[title] ?? "ellipsis")
+        config.cornerStyle = .medium
+        config.contentInsets = NSDirectionalEdgeInsets(top: 10, leading: 12, bottom: 10, trailing: 12)
+        b.configuration = config; b.accessibilityLabel = title
+        b.widthAnchor.constraint(equalToConstant: 46).isActive = true
+        toolButtons[title] = b
         b.addAction(UIAction { _ in action() }, for: .touchUpInside); tools.addArrangedSubview(b)
+    }
+    private func showMore() {
+        menu("필기", options: [
+            ("필기 백업", { [weak self] in self?.exportInk() }),
+            ("백업 가져오기", { [weak self] in self?.importInk() }),
+            ("이 문제 필기 지우기", { [weak self] in self?.clearInk() }),
+            ("입력 확인", { [weak self] in self?.showDiagnostics() })
+        ])
+    }
+    @objc private func pencilHover(_ gesture: UIHoverGestureRecognizer) {
+        guard !writing, currentID != nil, canvas.isUserInteractionEnabled,
+              gesture.state == .began || gesture.state == .changed else {
+            hoverTip.isHidden = true; return
+        }
+        showHover(at: gesture.location(in: canvasHost))
+    }
+    private func showHover(at point: CGPoint) {
+        let eraser = canvas.tool as? PKEraserTool
+        let ink = canvas.tool as? PKInkingTool
+        let size = max(eraser == nil ? 4 : 8, (eraser?.width ?? ink?.width ?? 3) * canvas.zoomScale)
+        hoverTip.bounds = CGRect(x: 0, y: 0, width: size, height: size)
+        hoverTip.center = point; hoverTip.layer.cornerRadius = size / 2
+        hoverTip.layer.borderColor = (eraser == nil ? ink?.color ?? .label : .systemBlue).cgColor
+        hoverTip.backgroundColor = eraser == nil ? ink?.color : UIColor.systemBlue.withAlphaComponent(0.08)
+        hoverTip.isHidden = false
     }
     private func report(_ message: String) { status.text = message; status.textColor = .systemRed }
     private func updateToolStatus() {
+        hoverTip.isHidden = true
+        for title in ["펜", "지우개"] {
+            let selected = (canvas.tool is PKEraserTool) == (title == "지우개")
+            toolButtons[title]?.configuration?.background.backgroundColor = selected ? view.tintColor.withAlphaComponent(0.14) : .clear
+            toolButtons[title]?.accessibilityTraits = selected ? [.button, .selected] : .button
+        }
+        toolButtons["색"]?.tintColor = (pen as? PKInkingTool)?.color
+        toolButtons["↶"]?.isEnabled = !undoHistory.isEmpty
+        toolButtons["↷"]?.isEnabled = !redoHistory.isEmpty
         status.textColor = .secondaryLabel
         status.text = canvas.tool is PKEraserTool ? "지우개 · 손가락으로 이동·확대" : "펜 · 손가락으로 이동·확대"
     }
@@ -140,6 +205,7 @@ final class PracticeController: UIViewController, WKScriptMessageHandler, WKNavi
                     self.pen = PKInkingTool(.pen, color: (self.pen as? PKInkingTool)?.color ?? .black, width: width)
                     self.canvas.tool = self.pen
                 }
+                self.updateToolStatus()
             })
         })
     }
@@ -163,6 +229,7 @@ final class PracticeController: UIViewController, WKScriptMessageHandler, WKNavi
         replacing = true; canvas.drawing = drawing; replacing = false
     }
     func canvasViewDidBeginUsingTool(_ canvasView: PKCanvasView) {
+        hoverTip.isHidden = true
         beforeStroke = canvas.drawing; writing = true; web.isUserInteractionEnabled = false
     }
     func canvasViewDidEndUsingTool(_ canvasView: PKCanvasView) {
@@ -209,7 +276,7 @@ final class PracticeController: UIViewController, WKScriptMessageHandler, WKNavi
         present(alert, animated: true)
     }
     private func showDiagnostics() {
-        let message = "앱 0.2 · iPadOS \(UIDevice.current.systemVersion)\n더블탭 수신: \(tapCount)\n꾹 쥐기 수신: \(squeezeCount)\n\(lastGesture)\n\n\(NativeChecks.run())"
+        let message = "앱 0.3 · iPadOS \(UIDevice.current.systemVersion)\n더블탭 수신: \(tapCount)\n꾹 쥐기 수신: \(squeezeCount)\n\(lastGesture)\n\n\(NativeChecks.run())"
         let alert = UIAlertController(title: "입력 확인", message: message, preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: "닫기", style: .cancel))
         present(alert, animated: true)
@@ -229,7 +296,10 @@ final class PracticeController: UIViewController, WKScriptMessageHandler, WKNavi
             else { replace(PKDrawing()) }
         }
         catch { report("이 문항의 필기를 읽지 못했습니다."); canvas.isUserInteractionEnabled = false; return }
-        heading.text = body["title"] as? String ?? "회차와 문제를 선택하세요."
+        let title = (body["title"] as? String ?? "").components(separatedBy: "\n").first ?? ""
+        heading.text = "나의 풀이 · " + title
+        notebook.isHidden = id == nil; hoverTip.isHidden = true
+        view.setNeedsLayout()
         canvas.isUserInteractionEnabled = id != nil && storageReady
         canvas.setContentOffset(.zero, animated: false)
         updateToolStatus()
@@ -304,7 +374,15 @@ final class PracticeController: UIViewController, WKScriptMessageHandler, WKNavi
         } else original.call(this);
       };
       const style = document.createElement('style');
-      style.textContent = '.download{display:none}';
+      style.textContent = `.download,.notebook>.note-title,.notebook>.toolbar,.notebook>#eraserSettings,.notebook>.canvas-wrap{display:none!important}
+        body{background:#f6f8fc;color:#263449;font-family:-apple-system,BlinkMacSystemFont,sans-serif}
+        .question-card,.notebook{border-color:#e1e7f0;border-radius:16px;box-shadow:none}
+        .study-layout{display:block}.question-sidebar{position:static;width:auto}.workspace{min-width:0}
+        .question-sidebar .subtle,.question-sidebar .side-link{display:none}
+        #questionGrid{display:flex;flex-wrap:wrap;gap:6px}.question-sidebar h2{font-size:18px}
+        .notebook{padding-top:14px}.question-card{padding:22px}.question-text{line-height:1.8}
+        .primary{background:#2f5795;border-color:#2f5795}.typed-label{font-size:13px}
+        .question-follower{display:none!important}`;
       document.head.append(style);
       sync();
     })();
