@@ -379,10 +379,12 @@ final class PracticeController: UIViewController, WKScriptMessageHandler, WKNavi
         .question-card,.notebook{border-color:#e1e7f0;border-radius:16px;box-shadow:none}
         .study-layout{display:block}.question-sidebar{position:static;width:auto}.workspace{min-width:0}
         .question-sidebar .subtle,.question-sidebar .side-link{display:none}
-        #questionGrid{display:flex;flex-wrap:wrap;gap:6px}.question-sidebar h2{font-size:18px}
+        #questionNumbers{display:flex;flex-wrap:nowrap;overflow-x:auto;gap:6px;margin:8px 0 12px}
+        #questionNumbers button{min-width:36px}.question-sidebar>.eyebrow,.question-sidebar>h2,.question-sidebar>p,.question-sidebar>.progress-track,.question-sidebar>a{display:none}
+        .question-sidebar .check{display:inline-flex;margin:0 8px 12px}.question-sidebar>button{width:auto;min-height:34px;padding:4px 10px;margin:0 0 12px}
         .notebook{padding-top:14px}.question-card{padding:22px}.question-text{line-height:1.8}
         .primary{background:#2f5795;border-color:#2f5795}.typed-label{font-size:13px}
-        .question-follower{display:none!important}`;
+        .study-dock{position:static;max-height:none;overflow:visible}`;
       document.head.append(style);
       sync();
     })();
