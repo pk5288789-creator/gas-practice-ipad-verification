@@ -35,29 +35,89 @@ HARNESS = r'''
                     let data = text.data(using: .utf8) ?? Data()
                     let result = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
                     let native = NativeChecks.run()
+                    let restored = self.checkRestoredFeatures()
+                    try? SmoothingChecks.comparisonImage().pngData()?.write(to: URL.documentsDirectory.appendingPathComponent("smoothing.png"))
                     self.canvas.tool = PKEraserTool(.bitmap, width: 48)
                     self.showHover(at: CGPoint(x: 100, y: 120))
                     let hoverOK = !self.hoverTip.isHidden && abs(self.hoverTip.bounds.width - 48 * self.canvas.zoomScale) < 0.1
                         && !self.hoverTip.isUserInteractionEnabled && self.hoverTip.center == CGPoint(x: 100, y: 120)
                     self.canvas.tool = self.pen; self.updateToolStatus()
-                    let ok = hoverOK && !self.notebook.isHidden && self.toolButtons.count == 7
+                    let ok = restored && hoverOK && !self.notebook.isHidden && self.toolButtons.count == 7
                         && result["webInkHidden"] as? Bool == true
                         && result["memoVisible"] as? Bool == true && result["completeVisible"] as? Bool == true
                         && error == nil && self.currentID != nil && self.currentID == result["id"] as? String
                         && result["visible"] as? Bool == true && !(result["prompt"] as? String ?? "").isEmpty
                         && self.canvas.isUserInteractionEnabled && native.hasPrefix("내부 확인 통과")
-                    let portrait = UIGraphicsImageRenderer(bounds: self.view.bounds).image { _ in
-                        self.view.drawHierarchy(in: self.view.bounds, afterScreenUpdates: true)
-                    }
-                    try? portrait.pngData()?.write(to: URL.documentsDirectory.appendingPathComponent("portrait.png"))
+                    self.snapshot("portrait.png")
                     self.view.window?.windowScene?.requestGeometryUpdate(.iOS(interfaceOrientations: .landscapeLeft))
                     DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                        let landscapeOK = self.stack.axis == .horizontal && self.canvasHost.bounds.width > 300
-                        self.writeSmoke(ok && landscapeOK, detail: text + "\n" + native + "\nHover geometry, single notebook, memo/completion, portrait/landscape layout checked. " + (error?.localizedDescription ?? ""))
+                        let landscapeOK = self.stack.axis == .horizontal && self.canvasHost.bounds.width > 300 && !self.pinnedQuestion.isHidden
+                        self.snapshot("landscape.png")
+                        let prompt = self.pinnedQuestion.text
+                        webView.evaluateJavaScript("document.getElementById('answerToggle').click(); window.scrollTo(0,document.body.scrollHeight)") { _, _ in
+                            let pinnedOK = self.pinnedQuestion.text == prompt && self.pinnedQuestion.window != nil && !self.pinnedQuestion.isHidden
+                            self.setAppearance(.dark)
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                self.snapshot("dark.png")
+                                self.toggleToolPalette()
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                                    let openOK = self.presentedViewController === self.toolPalette && self.toolPalette != nil
+                                    self.snapshot("palette.png", window: true)
+                                    self.toggleToolPalette()
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                                        let closeOK = self.presentedViewController == nil
+                                        self.writeSmoke(ok && landscapeOK && pinnedOK && openOK && closeOK, detail: text + "\n" + native + "\nRestored features: \(restored), pinned while scrolling: \(pinnedOK), palette open/close: \(openOK)/\(closeOK).")
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
+    }
+    private func snapshot(_ name: String, window: Bool = false) {
+        let target: UIView = window ? view.window ?? view : view
+        let image = UIGraphicsImageRenderer(bounds: target.bounds).image { _ in target.drawHierarchy(in: target.bounds, afterScreenUpdates: true) }
+        try? image.pngData()?.write(to: URL.documentsDirectory.appendingPathComponent(name))
+    }
+    private func checkRestoredFeatures() -> Bool {
+        var checks = [Bool]()
+        setAppearance(.light); chooseColor(.black, automatic: true)
+        checks.append((pen as? PKInkingTool)?.color == UIColor.black)
+        let source = SmoothingChecks.fixture().strokes[0]
+        smoothingSlider.value = 100; smoothingChanged()
+        replace(PKDrawing()); beforeStroke = PKDrawing(); writing = true
+        canvas.drawing = PKDrawing(strokes:[source]); finishDrawing()
+        let corrected = canvas.drawing
+        checks.append(corrected.strokes.count == 1 && corrected.strokes[0].path[8].location != source.path[8].location)
+        undoInk(); checks.append(canvas.drawing.strokes.isEmpty)
+        redoInk(); checks.append(canvas.drawing.strokes.count == 1)
+        eraserSlider.value = 73; eraserChanged(); toggleTool(); toggleTool()
+        checks.append((canvas.tool as? PKEraserTool)?.width == 73)
+        checks.append(UserDefaults.standard.double(forKey:"eraserWidth") == 73 && UserDefaults.standard.double(forKey:"smoothing") == 1)
+        setAppearance(.dark); checks.append((pen as? PKInkingTool)?.color == UIColor.white && canvas.drawing.strokes[0].ink.color == UIColor.white)
+        setAppearance(.light); checks.append(canvas.drawing.strokes[0].ink.color == UIColor.black)
+        let prompt = pinnedQuestion.text ?? ""; toggleQuestion(); checks.append(!pinnedQuestion.isHidden && !prompt.isEmpty); toggleQuestion()
+        // Exercise the same finish/undo path as real drawing, including scaled circles.
+        for scale in [CGFloat(0.25), 1, 2] {
+            canvas.zoomScale = scale
+            let points = (0...160).map { i -> PKStrokePoint in
+                let angle = Double(i)/160*3*2*Double.pi
+                return PKStrokePoint(location:CGPoint(x:(100+90*cos(angle))/scale,y:(60+55*sin(angle))/scale),timeOffset:Double(i)*0.003,
+                    size:CGSize(width:3,height:3),opacity:1,force:0.5,azimuth:0,altitude:.pi/2)
+            }
+            var base = SmoothingChecks.fixture(); base.transform(using:CGAffineTransform(scaleX:1/scale,y:1/scale))
+            let gesture = PKStroke(ink:PKInk(.pen,color:.black),path:PKStrokePath(controlPoints:points,creationDate:Date()))
+            replace(base); beforeStroke = base; writing = true; canvas.tool = pen
+            canvas.drawing = PKDrawing(strokes:base.strokes + [gesture]); finishDrawing()
+            checks.append(canvas.drawing.strokes.count <= base.strokes.count && canvas.drawing.dataRepresentation() != base.dataRepresentation())
+            undoInk(); checks.append(canvas.drawing.strokes.count == base.strokes.count)
+        }
+        canvas.zoomScale = 1; replace(PKDrawing()); canvas.tool = pen
+        undoHistory.removeAll(); redoHistory.removeAll(); smoothingSlider.value = 50; smoothingChanged()
+        updateToolStatus()
+        return checks.allSatisfy { $0 }
     }
     private func writeSmoke(_ passed: Bool, detail: String) {
         let result: [String: Any] = ["passed":passed, "detail":detail, "scope":"Simulator build, resource loading, 415 questions, first question bridge, native geometry/masking and drawing serialization. Physical Pencil and Swift Playground importer NOT tested."]
@@ -96,7 +156,7 @@ def prepare():
     with (APP / 'Info.plist').open('wb') as file:
         plistlib.dump({'CFBundleIdentifier':BUNDLE, 'CFBundleExecutable':'GasPractice',
             'CFBundleName':'GasPractice', 'CFBundlePackageType':'APPL',
-            'CFBundleVersion':'3', 'CFBundleShortVersionString':'0.3',
+            'CFBundleVersion':'4', 'CFBundleShortVersionString':'0.4',
             'MinimumOSVersion':'17.5', 'UIDeviceFamily':[2],
             'UILaunchScreen':{}, 'UISupportedInterfaceOrientations':[
                 'UIInterfaceOrientationPortrait','UIInterfaceOrientationLandscapeLeft',
@@ -136,7 +196,8 @@ def main():
     if not report.exists():
         raise RuntimeError('App did not produce an execution result within 90 seconds.')
     shutil.copy2(report, OUT/'result.json')
-    shutil.copy2(container/'Documents'/'portrait.png', OUT/'portrait.png')
+    for image in (container/'Documents').glob('*.png'):
+        shutil.copy2(image, OUT/image.name)
     result = json.loads(report.read_text())
     if not result.get('passed'):
         raise RuntimeError(result)

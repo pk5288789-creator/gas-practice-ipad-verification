@@ -4,7 +4,7 @@ import PencilKit
 // Runs on the user's iPad; it is not a substitute for physical Pencil testing.
 enum NativeChecks {
     static func run() -> String {
-        var failures = [String]()
+        var failures = SmoothingChecks.run()
         for turns in [3.0, -3.0, 3.2] {
             let points = (0...240).map { i in
                 let angle = Double(i) / 240 * turns * 2 * .pi
@@ -18,6 +18,20 @@ enum NativeChecks {
                 return CGPoint(x: 100 + 40 * cos(angle), y: 100 + 30 * sin(angle))
             }
             if CircleErase.region(points: points, duration: 1.5) != nil { failures.append("일반 원 보호") }
+        }
+        for scale in [CGFloat(0.25), 1, 2] {
+            let loop = (0...160).map { i -> CGPoint in
+                let angle = Double(i)/160*2.5*2*Double.pi
+                return CGPoint(x:(150+90*cos(angle))/scale,y:(150+50*sin(angle))/scale)
+            }
+            if CircleErase.region(points: loop, duration: 0.35, scale: scale) == nil { failures.append("확대율별 빠른 원 \(scale)") }
+        }
+        let scribble = (0...120).map { i -> CGPoint in
+            CGPoint(x:100+60*cos(Double(i)/120*7*Double.pi),y:80+CGFloat(i)/3)
+        }
+        if CircleErase.scribbleRegion(points:scribble,duration:1.2) == nil { failures.append("왕복 낙서 지우기") }
+        for stroke in SmoothingChecks.fixture().strokes {
+            if CircleErase.region(for:stroke) != nil || CircleErase.scribbleRegion(for:stroke) != nil { failures.append("일반 한글 획 보호") }
         }
         let points = (0...100).map { i in
             PKStrokePoint(location: CGPoint(x: CGFloat(20 + i * 2), y: 100), timeOffset: Double(i) * 0.01,
