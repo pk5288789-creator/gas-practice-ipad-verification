@@ -19,7 +19,10 @@ final class PracticeController: UIViewController, WKScriptMessageHandler, WKNavi
     private var questionLayout: Bool?
     private weak var toolPalette: UIViewController?
     private var automaticInk = true
-    private var isDark: Bool { traitCollection.userInterfaceStyle == .dark }
+    private var isDark: Bool {
+        let preference = UserDefaults.standard.integer(forKey: "appearance")
+        return preference == UIUserInterfaceStyle.dark.rawValue || (preference == 0 && traitCollection.userInterfaceStyle == .dark)
+    }
     private var defaultInk: UIColor { isDark ? .white : .black }
     private var toolButtons = [String: UIButton]()
     private var splitConstraint: NSLayoutConstraint?
@@ -239,7 +242,7 @@ final class PracticeController: UIViewController, WKScriptMessageHandler, WKNavi
     }
     private func toggleToolPalette() {
         if let palette = toolPalette, presentedViewController === palette {
-            palette.dismiss(animated: true); toolPalette = nil
+            palette.dismiss(animated: false); toolPalette = nil
         } else { showToolPalette() }
     }
     private func menu(_ title: String, options: [(String, () -> Void)]) {
@@ -327,12 +330,16 @@ final class PracticeController: UIViewController, WKScriptMessageHandler, WKNavi
                  ("시스템", { [weak self, weak controller] in self?.setAppearance(.unspecified); controller?.dismiss(animated: true) })])
         controller.popoverPresentationController?.sourceView = tools
         controller.popoverPresentationController?.sourceRect = tools.bounds
-        toolPalette = controller; present(controller, animated: true)
+        controller.overrideUserInterfaceStyle = overrideUserInterfaceStyle
+        toolPalette = controller; present(controller, animated: false)
     }
     @objc private func paletteSliderUnused() {}
     private func setAppearance(_ style: UIUserInterfaceStyle) {
         UserDefaults.standard.set(style.rawValue, forKey: "appearance")
-        overrideUserInterfaceStyle = style; applyAppearance()
+        overrideUserInterfaceStyle = style
+        view.window?.overrideUserInterfaceStyle = style
+        view.overrideUserInterfaceStyle = style
+        applyAppearance()
     }
     override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
         super.traitCollectionDidChange(previousTraitCollection)

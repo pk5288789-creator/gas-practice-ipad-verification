@@ -41,11 +41,16 @@ enum SmoothingChecks {
                 if abs(stroke.path[i].timeOffset-first.path[i].timeOffset) > 0.001 || abs(stroke.path[i].force-first.path[i].force)>0.001 { failures.append("필압·시간 보존"); break }
             }
         }
+        // Measure actual high-frequency wobble on a straight part, not just coordinate changes.
+        func wobble(_ stroke: PKStroke) -> CGFloat {
+            (6..<26).reduce(0) { $0 + abs(stroke.path[$1-1].location.y - 2*stroke.path[$1].location.y + stroke.path[$1+1].location.y) }
+        }
+        if wobble(full) >= wobble(first)*0.5 || wobble(half) >= wobble(first)*0.85 { failures.append("보정률별 떨림 감소") }
         let dark = InkAppearance.adapt(original,dark:true)
-        if dark.strokes[0].ink.color != UIColor.white { failures.append("다크모드 흰색") }
-        if InkAppearance.adapt(dark,dark:false).strokes[0].ink.color != UIColor.black { failures.append("밝은모드 검정") }
+        if !InkAppearance.sameColor(dark.strokes[0].ink.color, .white) { failures.append("다크모드 흰색") }
+        if !InkAppearance.sameColor(InkAppearance.adapt(dark,dark:false).strokes[0].ink.color, .black) { failures.append("밝은모드 검정") }
         let legacy = PKDrawing(strokes:[PKStroke(ink:PKInk(.pen,color:UIColor(red:0.12,green:0.25,blue:0.22,alpha:1)),path:first.path)])
-        if InkAppearance.adapt(legacy,dark:false).strokes[0].ink.color != UIColor.black { failures.append("이전 기본색 검정 수정") }
+        if !InkAppearance.sameColor(InkAppearance.adapt(legacy,dark:false).strokes[0].ink.color, .black) { failures.append("이전 기본색 검정 수정") }
         let blue = PKDrawing(strokes:[PKStroke(ink:PKInk(.pen,color:.systemBlue),path:first.path)])
         if InkAppearance.adapt(blue,dark:true).strokes[0].ink.color != blue.strokes[0].ink.color { failures.append("선택한 색상 유지") }
         return failures

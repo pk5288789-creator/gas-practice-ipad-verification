@@ -20,8 +20,10 @@ BUNDLE = 'com.gaspractice.ci'
 HARNESS = r'''
     #if CI_SMOKE_TEST
     private var ciChecks = [Bool]()
+    private var ciStarted = false
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        guard ProcessInfo.processInfo.arguments.contains("--ci-smoke") else { return }
+        guard ProcessInfo.processInfo.arguments.contains("--ci-smoke"), !ciStarted else { return }
+        ciStarted = true
         let script = "(() => { const p=window.PAPERS[0]; openPaper(p.id,p.questions[0].no); return window.PAPERS.reduce((n,p)=>n+p.questions.length,0); })()"
         webView.evaluateJavaScript(script) { [weak self] count, error in
             guard let self else { return }
@@ -67,7 +69,8 @@ HARNESS = r'''
                                     self.toggleToolPalette()
                                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
                                         let closeOK = self.presentedViewController == nil
-                                        self.writeSmoke(ok && landscapeOK && pinnedOK && openOK && closeOK, detail: text + "\n" + native + "\nRestored features: \(restored), pinned while scrolling: \(pinnedOK), palette open/close: \(openOK)/\(closeOK).")
+                                        let darkOK = self.view.traitCollection.userInterfaceStyle == .dark && InkAppearance.sameColor((self.pen as? PKInkingTool)?.color, .white)
+                                        self.writeSmoke(ok && landscapeOK && pinnedOK && openOK && closeOK && darkOK, detail: text + "\n" + native + "\nRestored features: \(restored), pinned while scrolling: \(pinnedOK), palette open/close: \(openOK)/\(closeOK), dark: \(darkOK).")
                                     }
                                 }
                             }
@@ -85,7 +88,7 @@ HARNESS = r'''
     private func checkRestoredFeatures() -> Bool {
         var checks = [Bool]()
         setAppearance(.light); chooseColor(.black, automatic: true)
-        checks.append((pen as? PKInkingTool)?.color == UIColor.black)
+        checks.append(InkAppearance.sameColor((pen as? PKInkingTool)?.color, .black))
         let source = SmoothingChecks.fixture().strokes[0]
         smoothingSlider.value = 100; smoothingChanged()
         replace(PKDrawing()); beforeStroke = PKDrawing(); writing = true
@@ -97,8 +100,8 @@ HARNESS = r'''
         eraserSlider.value = 73; eraserChanged(); toggleTool(); toggleTool()
         checks.append((canvas.tool as? PKEraserTool)?.width == 73)
         checks.append(UserDefaults.standard.double(forKey:"eraserWidth") == 73 && UserDefaults.standard.double(forKey:"smoothing") == 1)
-        setAppearance(.dark); checks.append((pen as? PKInkingTool)?.color == UIColor.white && canvas.drawing.strokes[0].ink.color == UIColor.white)
-        setAppearance(.light); checks.append(canvas.drawing.strokes[0].ink.color == UIColor.black)
+        setAppearance(.dark); checks.append(InkAppearance.sameColor((pen as? PKInkingTool)?.color, .white) && InkAppearance.sameColor(canvas.drawing.strokes[0].ink.color, .white))
+        setAppearance(.light); checks.append(InkAppearance.sameColor(canvas.drawing.strokes[0].ink.color, .black))
         let prompt = pinnedQuestion.text ?? ""; toggleQuestion(); checks.append(!pinnedQuestion.isHidden && !prompt.isEmpty); toggleQuestion()
         // Exercise the same finish/undo path as real drawing, including scaled circles.
         for scale in [CGFloat(0.25), 1, 2] {

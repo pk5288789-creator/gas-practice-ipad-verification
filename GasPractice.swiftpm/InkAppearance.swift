@@ -2,6 +2,13 @@ import UIKit
 import PencilKit
 
 enum InkAppearance {
+    static func sameColor(_ color: UIColor?, _ expected: UIColor) -> Bool {
+        guard let color else { return false }
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        var er: CGFloat = 0, eg: CGFloat = 0, eb: CGFloat = 0, ea: CGFloat = 0
+        guard color.getRed(&r, green: &g, blue: &b, alpha: &a), expected.getRed(&er, green: &eg, blue: &eb, alpha: &ea) else { return false }
+        return abs(r-er) < 0.005 && abs(g-eg) < 0.005 && abs(b-eb) < 0.005 && abs(a-ea) < 0.005
+    }
     // Keep monochrome ink readable on either paper. Persist it as black so
     // changing appearance does not make a backup depend on the active theme.
     static func adapt(_ drawing: PKDrawing, dark: Bool) -> PKDrawing {

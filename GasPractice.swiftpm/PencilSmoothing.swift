@@ -17,8 +17,9 @@ enum PencilSmoothing {
         for (i, p) in points.enumerated() {
             guard i >= 2, i < points.count - 2 else { filtered.append(p); continue }
             let a = points[i-2].location, b = points[i+2].location
-            let incoming = CGPoint(x: p.location.x-a.x, y: p.location.y-a.y)
-            let outgoing = CGPoint(x: b.x-p.location.x, y: b.y-p.location.y)
+            let wideA = points[max(0,i-6)].location, wideB = points[min(points.count-1,i+6)].location
+            let incoming = CGPoint(x: p.location.x-wideA.x, y: p.location.y-wideA.y)
+            let outgoing = CGPoint(x: wideB.x-p.location.x, y: wideB.y-p.location.y)
             let lengths = hypot(incoming.x,incoming.y) * hypot(outgoing.x,outgoing.y)
             // Keep deliberate sharp corners and reversals intact.
             if lengths > 0.001 && (incoming.x*outgoing.x + incoming.y*outgoing.y) / lengths < 0.25 { filtered.append(p); continue }
