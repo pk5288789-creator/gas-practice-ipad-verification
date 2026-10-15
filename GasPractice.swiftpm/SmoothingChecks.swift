@@ -44,6 +44,10 @@ enum SmoothingChecks {
         let dark = InkAppearance.adapt(original,dark:true)
         if dark.strokes[0].ink.color != UIColor.white { failures.append("다크모드 흰색") }
         if InkAppearance.adapt(dark,dark:false).strokes[0].ink.color != UIColor.black { failures.append("밝은모드 검정") }
+        let legacy = PKDrawing(strokes:[PKStroke(ink:PKInk(.pen,color:UIColor(red:0.12,green:0.25,blue:0.22,alpha:1)),path:first.path)])
+        if InkAppearance.adapt(legacy,dark:false).strokes[0].ink.color != UIColor.black { failures.append("이전 기본색 검정 수정") }
+        let blue = PKDrawing(strokes:[PKStroke(ink:PKInk(.pen,color:.systemBlue),path:first.path)])
+        if InkAppearance.adapt(blue,dark:true).strokes[0].ink.color != blue.strokes[0].ink.color { failures.append("선택한 색상 유지") }
         return failures
     }
     static func comparisonImage() -> UIImage {
