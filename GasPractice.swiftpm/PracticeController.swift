@@ -36,6 +36,7 @@ final class PracticeController: UIViewController, WKScriptMessageHandler, WKNavi
     override func viewDidLoad() {
         super.viewDidLoad()
         if UserDefaults.standard.object(forKey: "eraserWidth") == nil { eraserWidth = 24 }
+        if UserDefaults.standard.object(forKey: "smoothing") == nil { smoothing = 0.35 }
         overrideUserInterfaceStyle = UIUserInterfaceStyle(rawValue: UserDefaults.standard.integer(forKey: "appearance")) ?? .unspecified
         view.tintColor = UIColor(red: 0.16, green: 0.34, blue: 0.65, alpha: 1)
         view.backgroundColor = .systemBackground

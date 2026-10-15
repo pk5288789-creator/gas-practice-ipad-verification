@@ -19,6 +19,7 @@ BUNDLE = 'com.gaspractice.ci'
 
 HARNESS = r'''
     #if CI_SMOKE_TEST
+    private var ciChecks = [Bool]()
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         guard ProcessInfo.processInfo.arguments.contains("--ci-smoke") else { return }
         let script = "(() => { const p=window.PAPERS[0]; openPaper(p.id,p.questions[0].no); return window.PAPERS.reduce((n,p)=>n+p.questions.length,0); })()"
@@ -117,10 +118,11 @@ HARNESS = r'''
         canvas.zoomScale = 1; replace(PKDrawing()); canvas.tool = pen
         undoHistory.removeAll(); redoHistory.removeAll(); smoothingSlider.value = 50; smoothingChanged()
         updateToolStatus()
+        ciChecks = checks
         return checks.allSatisfy { $0 }
     }
     private func writeSmoke(_ passed: Bool, detail: String) {
-        let result: [String: Any] = ["passed":passed, "detail":detail, "scope":"Simulator build, resource loading, 415 questions, first question bridge, native geometry/masking and drawing serialization. Physical Pencil and Swift Playground importer NOT tested."]
+        let result: [String: Any] = ["passed":passed, "detail":detail, "feature_checks":ciChecks, "scope":"Simulator build, resource loading, 415 questions, first question bridge, native geometry/masking and drawing serialization. Physical Pencil and Swift Playground importer NOT tested."]
         do {
             let data = try JSONSerialization.data(withJSONObject: result, options: [.prettyPrinted, .sortedKeys])
             try data.write(to: URL.documentsDirectory.appendingPathComponent("ci-smoke.json"), options: .atomic)
