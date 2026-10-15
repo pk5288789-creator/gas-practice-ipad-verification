@@ -125,7 +125,7 @@ HARNESS = r'''
         return checks.allSatisfy { $0 }
     }
     private func writeSmoke(_ passed: Bool, detail: String) {
-        let result: [String: Any] = ["passed":passed, "detail":detail, "feature_checks":ciChecks, "scope":"Simulator build, resource loading, 415 questions, first question bridge, native geometry/masking and drawing serialization. Physical Pencil and Swift Playground importer NOT tested."]
+        let result: [String: Any] = ["passed":passed, "detail":detail, "feature_checks":ciChecks, "scope":"Simulator build and launch; 415 questions; pinned prompt; eraser size; smoothing strength and undo; theme color components; palette toggle; circle erase at 0.25x/1x/2x, masking and serialization. Physical Pencil and Swift Playground importer NOT tested."]
         do {
             let data = try JSONSerialization.data(withJSONObject: result, options: [.prettyPrinted, .sortedKeys])
             try data.write(to: URL.documentsDirectory.appendingPathComponent("ci-smoke.json"), options: .atomic)

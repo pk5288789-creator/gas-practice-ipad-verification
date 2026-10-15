@@ -542,6 +542,11 @@ final class PracticeController: UIViewController, WKScriptMessageHandler, WKNavi
         html[data-native-theme=dark] :is(.question-card,.notebook,.lesson-step,.answer,.exam-card,textarea,input,button,details,.hero-paper){background:#21252c;color:#eef1f6;border-color:#3c424c}
         html[data-native-theme=dark] :is(.follow-title,.follow-hint,.prose,.eyebrow,.type-tag){color:#d9e5ff}
         html[data-native-theme=dark] :is(.primary,#questionNumbers .active){background:#355d9d;color:white}
+        html[data-native-theme=dark] :is(#answer,#typed,.step-body .formula-line){background:#1b1e24;color:#eef1f6;border-color:#434c5a}
+        html[data-native-theme=dark] :is(.step-heading h3,#answer .eyebrow,.typed-label){color:#c5d8ff}
+        html[data-native-theme=dark] .step-number{background:#35445e;color:#eaf0ff}
+        html[data-native-theme=dark] #lesson{border-color:#434c5a}
+        html[data-native-theme=dark] #typed::placeholder{color:#a4adbb}
         html[data-native-theme=dark] #questionNotices{background:#453b25;color:#ffe3aa}`;
       document.head.append(style);
       post({kind:"ready"});
