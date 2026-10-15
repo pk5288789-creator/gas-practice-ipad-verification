@@ -27,7 +27,9 @@ enum NativeChecks {
             if CircleErase.region(points: loop, duration: 0.35, scale: scale) == nil { failures.append("확대율별 빠른 원 \(scale)") }
         }
         let scribble = (0...120).map { i -> CGPoint in
-            CGPoint(x:100+60*cos(Double(i)/120*7*Double.pi),y:80+CGFloat(i)/3)
+            let angle = Double(i) * Double.pi * 7.0 / 120.0
+            let x = 100.0 + 60.0 * cos(angle)
+            return CGPoint(x: x, y: 80.0 + Double(i)/3.0)
         }
         if CircleErase.scribbleRegion(points:scribble,duration:1.2) == nil { failures.append("왕복 낙서 지우기") }
         for stroke in SmoothingChecks.fixture().strokes {
