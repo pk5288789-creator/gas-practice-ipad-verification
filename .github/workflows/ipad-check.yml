@@ -1,0 +1,22 @@
+name: Free iPad simulator check
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  simulator:
+    # Standard public-repository runner only; no paid larger runner.
+    runs-on: macos-14
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile and launch the app in an iPad simulator
+        run: python3 ci/check_ipad.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ipad-verification
+          path: verification-output/
+          retention-days: 3

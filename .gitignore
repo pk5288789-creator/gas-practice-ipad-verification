@@ -1,0 +1,4 @@
+verification-output/
+__pycache__/
+*.zip
+prepare-02.cjs
