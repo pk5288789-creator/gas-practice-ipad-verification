@@ -112,6 +112,7 @@ HARNESS = r'''
                             let pinnedOK = self.pinnedQuestion.text == prompt && self.pinnedQuestion.window != nil && !self.pinnedQuestion.isHidden
                             self.setAppearance(.dark)
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                self.checkDarkAnswer { darkAnswerOK in
                                 self.snapshot("dark.png")
                                 self.toggleToolPalette()
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
@@ -121,8 +122,9 @@ HARNESS = r'''
                                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
                                         let closeOK = self.presentedViewController == nil
                                         let darkOK = self.view.traitCollection.userInterfaceStyle == .dark && InkAppearance.sameColor((self.pen as? PKInkingTool)?.color, .white)
-                                        self.writeSmoke(ok && contentOK && landscapeOK && pinnedOK && openOK && closeOK && darkOK, detail: text + "\n" + native + "\nRestored features: \(restored), answer screens and navigation: \(contentOK), pinned while scrolling: \(pinnedOK), palette open/close: \(openOK)/\(closeOK), dark: \(darkOK).")
+                                        self.writeSmoke(ok && contentOK && landscapeOK && pinnedOK && openOK && closeOK && darkOK && darkAnswerOK, detail: text + "\n" + native + "\nRestored features: \(restored), answer screens and navigation: \(contentOK), pinned while scrolling: \(pinnedOK), palette open/close: \(openOK)/\(closeOK), dark: \(darkOK), dark answer contrast: \(darkAnswerOK).")
                                     }
+                                }
                                 }
                             }
                         }
@@ -146,12 +148,14 @@ HARNESS = r'''
                                     let calcOK = error == nil && value as? Bool == true && self.currentID == "224344235204-7"
                                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                                         self.snapshot("calculation-answer.png")
-                                        self.web.evaluateJavaScript("document.getElementById('next').click()") { _, _ in
+                                        self.web.evaluateJavaScript("document.getElementById('next').click();q().prompt") { nextPrompt, nextError in
                                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                                                let nextOK = self.currentID == "224344235204-8" && self.pinnedQuestion.text.contains("문제 08")
-                                                self.web.evaluateJavaScript("document.getElementById('prev').click()") { _, _ in
+                                                let nextOK = nextError == nil && self.currentID == "224344235204-8"
+                                                    && self.pinnedQuestion.text == nextPrompt as? String && self.heading.text?.contains("문제 08") == true
+                                                self.web.evaluateJavaScript("document.getElementById('prev').click();q().prompt") { previousPrompt, previousError in
                                                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                                                        let previousOK = self.currentID == "224344235204-7" && self.pinnedQuestion.text.contains("문제 07")
+                                                        let previousOK = previousError == nil && self.currentID == "224344235204-7"
+                                                            && self.pinnedQuestion.text == previousPrompt as? String && self.heading.text?.contains("문제 07") == true
                                                         self.ciContentChecks["concept_screen"] = conceptOK
                                                         self.ciContentChecks["calculation_screen"] = calcOK
                                                         self.ciContentChecks["navigation_bridge"] = nextOK && previousOK
@@ -173,6 +177,29 @@ HARNESS = r'''
         let target: UIView = window ? view.window ?? view : view
         let image = UIGraphicsImageRenderer(bounds: target.bounds).image { _ in target.drawHierarchy(in: target.bounds, afterScreenUpdates: true) }
         try? image.pngData()?.write(to: URL.documentsDirectory.appendingPathComponent(name))
+    }
+    private func checkDarkAnswer(completion: @escaping (Bool) -> Void) {
+        let script = #"""
+        (() => {
+          $('answer').scrollIntoView();
+          const text=$('directAnswerText'), card=document.querySelector('#answer .direct-answer');
+          const luminance=color=>{
+            const channels=(color.match(/[\d.]+/g)||[]).slice(0,3).map(n=>{
+              const s=Number(n)/255;return s<=0.04045?s/12.92:Math.pow((s+0.055)/1.055,2.4);
+            });
+            return channels[0]*0.2126+channels[1]*0.7152+channels[2]*0.0722;
+          };
+          const background=luminance(getComputedStyle(card).backgroundColor), foreground=luminance(getComputedStyle(text).color);
+          const contrast=(foreground+0.05)/(background+0.05), bounds=card.getBoundingClientRect();
+          return document.documentElement.dataset.nativeTheme==='dark' && !$('answer').hidden
+            && background<0.2 && contrast>=4.5 && bounds.top<innerHeight && bounds.bottom>0;
+        })()
+        """#
+        web.evaluateJavaScript(script) { value, error in
+            let passed = error == nil && value as? Bool == true
+            self.ciContentChecks["dark_answer"] = passed
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { completion(passed) }
+        }
     }
     private func checkRestoredFeatures() -> Bool {
         var checks = [Bool]()

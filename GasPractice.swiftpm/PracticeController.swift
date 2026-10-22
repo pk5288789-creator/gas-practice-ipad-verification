@@ -127,7 +127,7 @@ final class PracticeController: UIViewController, WKScriptMessageHandler, WKNavi
         stack.addArrangedSubview(web); stack.addArrangedSubview(notebook)
         if let index = WebResources.indexURL() {
             web.loadFileURL(index, allowingReadAccessTo: index.deletingLastPathComponent())
-        } else { report("앱 0.4: 문제 자료를 찾지 못했습니다. 웹사이트에서 학습할 수 있습니다. 기존 프로젝트와 필기는 삭제하지 마세요.") }
+        } else { report("앱 0.5: 문제 자료를 찾지 못했습니다. 웹사이트에서 학습할 수 있습니다. 기존 프로젝트와 필기는 삭제하지 마세요.") }
         if !storageReady { report("저장된 필기를 읽지 못했습니다. 원본 보호를 위해 새 필기를 중지했습니다. 파일을 삭제하지 말고 오류를 알려주세요.") }
     }
 
@@ -425,7 +425,7 @@ final class PracticeController: UIViewController, WKScriptMessageHandler, WKNavi
         present(alert, animated: true)
     }
     private func showDiagnostics() {
-        let message = "앱 0.4 · iPadOS \(UIDevice.current.systemVersion)\n더블탭 수신: \(tapCount)\n꾹 쥐기 수신: \(squeezeCount)\n\(lastGesture)\n\n\(NativeChecks.run())"
+        let message = "앱 0.5 · iPadOS \(UIDevice.current.systemVersion)\n더블탭 수신: \(tapCount)\n꾹 쥐기 수신: \(squeezeCount)\n\(lastGesture)\n\n\(NativeChecks.run())"
         let alert = UIAlertController(title: "입력 확인", message: message, preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: "닫기", style: .cancel))
         present(alert, animated: true)
@@ -551,7 +551,7 @@ final class PracticeController: UIViewController, WKScriptMessageHandler, WKNavi
         /* Embedded learning UI; PencilKit owns handwriting and the pinned prompt. */
         .question-follow{display:none!important}.study-dock{display:block!important}
         #study .top{padding:12px}.top .app-link,.side-app-link{display:none}
-        html[data-native-theme=dark] :is(.top,.archive-content,.stats,.exam-card,.list-columns,.search,.archive nav button,.question-card,.notebook){background:#21252c;color:#eef1f6;border-color:#3c424c}
+        html[data-native-theme=dark] :is(.top,.archive-content,.stats,.exam-card,.list-columns,.search,.archive nav button,.question-card,.notebook,#helpDialog){background:#21252c;color:#eef1f6;border-color:#3c424c}
         html[data-native-theme=dark] :is(.library-heading h1,.exam-card h3,.stats h2,.stats b,.question-sidebar h2,#qTitle,.brand){color:#eef1f6}
         html[data-native-theme=dark] :is(.library-heading p,.resume-block>span,.stats span,.exam-card .partial,.exam-progress small,.results-head span,.list-columns,.exam-card .exam-count){color:#b3bdcc}
         html[data-native-theme=dark] #answer .direct-answer{background:#283448;border:1px solid #44536b}
