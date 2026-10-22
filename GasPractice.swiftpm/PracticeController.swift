@@ -547,7 +547,20 @@ final class PracticeController: UIViewController, WKScriptMessageHandler, WKNavi
         html[data-native-theme=dark] .step-number{background:#35445e;color:#eaf0ff}
         html[data-native-theme=dark] #lesson{border-color:#434c5a}
         html[data-native-theme=dark] #typed::placeholder{color:#a4adbb}
-        html[data-native-theme=dark] #questionNotices{background:#453b25;color:#ffe3aa}`;
+        html[data-native-theme=dark] #questionNotices{background:#453b25;color:#ffe3aa}
+        /* Embedded learning UI; PencilKit owns handwriting and the pinned prompt. */
+        .question-follow{display:none!important}.study-dock{display:block!important}
+        #study .top{padding:12px}.top .app-link,.side-app-link{display:none}
+        html[data-native-theme=dark] :is(.top,.archive-content,.stats,.exam-card,.list-columns,.search,.archive nav button,.question-card,.notebook){background:#21252c;color:#eef1f6;border-color:#3c424c}
+        html[data-native-theme=dark] :is(.library-heading h1,.exam-card h3,.stats h2,.stats b,.question-sidebar h2,#qTitle,.brand){color:#eef1f6}
+        html[data-native-theme=dark] :is(.library-heading p,.resume-block>span,.stats span,.exam-card .partial,.exam-progress small,.results-head span,.list-columns,.exam-card .exam-count){color:#b3bdcc}
+        html[data-native-theme=dark] #answer .direct-answer{background:#283448;border:1px solid #44536b}
+        html[data-native-theme=dark] #answer #directAnswerText{color:#f1f5fc}
+        html[data-native-theme=dark] #answer :is(#directAnswerHeading,#lesson>summary){color:#b8d0ff}
+        html[data-native-theme=dark] :is(.tabs button.active,.archive nav button.active,.exam-card>button){background:#355d9d;color:#fff}
+        html[data-native-theme=dark] :is(.stats .progress-track,.exam-progress .progress-track){background:#3c424c}
+        html[data-native-theme=dark] :is(.exam-card:hover,.lesson-step,.step-body .formula-line){background:#1b1e24}
+        html[data-native-theme=dark] .notice{background:#453b25;color:#ffe3aa}`;
       document.head.append(style);
       post({kind:"ready"});
       sync();

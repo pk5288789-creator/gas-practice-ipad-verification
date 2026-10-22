@@ -21,16 +21,66 @@ HARNESS = r'''
     #if CI_SMOKE_TEST
     private var ciChecks = [Bool]()
     private var ciStarted = false
+    private var ciContentChecks = [String: Any]()
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         guard ProcessInfo.processInfo.arguments.contains("--ci-smoke"), !ciStarted else { return }
         ciStarted = true
-        let script = "(() => { const p=window.PAPERS[0]; openPaper(p.id,p.questions[0].no); return window.PAPERS.reduce((n,p)=>n+p.questions.length,0); })()"
-        webView.evaluateJavaScript(script) { [weak self] count, error in
+        waitForDashboard(remaining: 40)
+    }
+    private func waitForDashboard(remaining: Int) {
+        web.evaluateJavaScript("!!(window.ANSWER_CARDS && document.querySelector('#cards .exam-card'))") { [weak self] ready, error in
             guard let self else { return }
-            guard error == nil, (count as? NSNumber)?.intValue == 415 else {
-                self.writeSmoke(false, detail: error?.localizedDescription ?? "Question data count failed")
+            guard error == nil, ready as? Bool == true else {
+                guard remaining > 0 else { self.writeSmoke(false, detail: "Dashboard did not become ready: \(String(describing: error))"); return }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { self.waitForDashboard(remaining: remaining - 1) }
                 return
             }
+            self.snapshot("dashboard.png")
+            self.auditWebContent()
+        }
+    }
+    private func auditWebContent() {
+        let script = #"""
+        (() => {
+          const failures=[], kinds={concept:0,calculation:0,incomplete:0};
+          const normalize=value=>String(value).replace(/\s+/g,' ').trim();
+          const expected=value=>{const node=document.createElement('div');node.innerHTML=fmt(value);return normalize(node.textContent);};
+          const dashboard=!$('library').hidden && !document.querySelector('.hero')
+            && document.querySelector('.library-heading h1')?.textContent==='기출문제'
+            && getComputedStyle(document.querySelector('#cards .exam-card')).display==='grid'
+            && [...document.styleSheets].some(sheet=>sheet.href?.endsWith('/dashboard.css'));
+          let checked=0;
+          for (const p of papers) {
+            paper=p;queue=[...p.questions];
+            for (index=0;index<queue.length;index++) {
+              const current=q(), card=window.ANSWER_CARDS[current.id], lesson=window.LESSONS[current.id];
+              renderQuestion();
+              const answer=$('directAnswerText'), detail=$('lesson');
+              const valid=card && card.answer.trim() && normalize(answer.textContent)===expected(card.answer)
+                && normalize($('questionText').textContent)===expected(current.prompt)
+                && (answer.compareDocumentPosition(detail)&Node.DOCUMENT_POSITION_FOLLOWING)!==0
+                && detail.open===(lesson.kind==='calculation') && !$('sourceAnswer').open
+                && $('answer').hidden && $('lessonText').children.length>0;
+              $('answerToggle').click();
+              if (!valid || $('answer').hidden || !$('directAnswerText').textContent.trim()) failures.push(current.id);
+              checked++;kinds[lesson.kind]=(kinds[lesson.kind]||0)+1;
+            }
+          }
+          const p=window.PAPERS[0];openPaper(p.id,p.questions[0].no);
+          return JSON.stringify({dashboard,checked,answerCards:Object.keys(window.ANSWER_CARDS).length,kinds,failures});
+        })()
+        """#
+        web.evaluateJavaScript(script) { [weak self] value, error in
+            guard let self else { return }
+            let audit = (try? JSONSerialization.jsonObject(with: Data((value as? String ?? "{}").utf8))) as? [String: Any] ?? [:]
+            self.ciContentChecks = audit
+            guard error == nil, audit["dashboard"] as? Bool == true,
+                audit["checked"] as? Int == 415, audit["answerCards"] as? Int == 415,
+                (audit["failures"] as? [String])?.isEmpty == true else {
+                self.writeSmoke(false, detail: error?.localizedDescription ?? "Dashboard / answer binding audit failed: \(audit)")
+                return
+            }
+            let webView = self.web!
             DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
                 let check = "JSON.stringify({id:q().id, visible:!document.getElementById('study').hidden, prompt:document.getElementById('questionText').innerText, webInkHidden:getComputedStyle(document.querySelector('.canvas-wrap')).display==='none', memoVisible:document.getElementById('typed').getBoundingClientRect().height>0, completeVisible:document.getElementById('complete').getBoundingClientRect().height>0})"
                 webView.evaluateJavaScript(check) { value, error in
@@ -56,8 +106,9 @@ HARNESS = r'''
                     DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                         let landscapeOK = self.stack.axis == .horizontal && self.canvasHost.bounds.width > 300 && !self.pinnedQuestion.isHidden
                         self.snapshot("landscape.png")
+                        self.checkAnswerScreensAndNavigation { contentOK in
                         let prompt = self.pinnedQuestion.text
-                        webView.evaluateJavaScript("document.getElementById('answerToggle').click(); window.scrollTo(0,document.body.scrollHeight)") { _, _ in
+                        webView.evaluateJavaScript("if(document.getElementById('answer').hidden)document.getElementById('answerToggle').click(); window.scrollTo(0,document.body.scrollHeight)") { _, _ in
                             let pinnedOK = self.pinnedQuestion.text == prompt && self.pinnedQuestion.window != nil && !self.pinnedQuestion.isHidden
                             self.setAppearance(.dark)
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
@@ -70,7 +121,45 @@ HARNESS = r'''
                                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
                                         let closeOK = self.presentedViewController == nil
                                         let darkOK = self.view.traitCollection.userInterfaceStyle == .dark && InkAppearance.sameColor((self.pen as? PKInkingTool)?.color, .white)
-                                        self.writeSmoke(ok && landscapeOK && pinnedOK && openOK && closeOK && darkOK, detail: text + "\n" + native + "\nRestored features: \(restored), pinned while scrolling: \(pinnedOK), palette open/close: \(openOK)/\(closeOK), dark: \(darkOK).")
+                                        self.writeSmoke(ok && contentOK && landscapeOK && pinnedOK && openOK && closeOK && darkOK, detail: text + "\n" + native + "\nRestored features: \(restored), answer screens and navigation: \(contentOK), pinned while scrolling: \(pinnedOK), palette open/close: \(openOK)/\(closeOK), dark: \(darkOK).")
+                                    }
+                                }
+                            }
+                        }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    private func checkAnswerScreensAndNavigation(completion: @escaping (Bool) -> Void) {
+        web.evaluateJavaScript("openPaper('224241302351',2)") { _, error in
+            guard error == nil else { completion(false); return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                self.web.evaluateJavaScript("document.getElementById('answerToggle').click(); document.getElementById('answer').scrollIntoView(); !document.getElementById('lesson').open && document.getElementById('directAnswerText').textContent.includes('2차압력')") { value, error in
+                    let conceptOK = error == nil && value as? Bool == true && self.currentID == "224241302351-2"
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        self.snapshot("concept-answer.png")
+                        self.web.evaluateJavaScript("openPaper('224344235204',7)") { _, _ in
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                self.web.evaluateJavaScript("document.getElementById('answerToggle').click(); document.getElementById('answer').scrollIntoView(); document.getElementById('lesson').open && document.getElementById('directAnswerText').textContent.includes('6,303.03') && document.querySelectorAll('#lessonText .lesson-step').length>1") { value, error in
+                                    let calcOK = error == nil && value as? Bool == true && self.currentID == "224344235204-7"
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                        self.snapshot("calculation-answer.png")
+                                        self.web.evaluateJavaScript("document.getElementById('next').click()") { _, _ in
+                                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                                let nextOK = self.currentID == "224344235204-8" && self.pinnedQuestion.text.contains("문제 08")
+                                                self.web.evaluateJavaScript("document.getElementById('prev').click()") { _, _ in
+                                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                                        let previousOK = self.currentID == "224344235204-7" && self.pinnedQuestion.text.contains("문제 07")
+                                                        self.ciContentChecks["concept_screen"] = conceptOK
+                                                        self.ciContentChecks["calculation_screen"] = calcOK
+                                                        self.ciContentChecks["navigation_bridge"] = nextOK && previousOK
+                                                        completion(conceptOK && calcOK && nextOK && previousOK)
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -125,7 +214,7 @@ HARNESS = r'''
         return checks.allSatisfy { $0 }
     }
     private func writeSmoke(_ passed: Bool, detail: String) {
-        let result: [String: Any] = ["passed":passed, "detail":detail, "feature_checks":ciChecks, "scope":"Simulator build and launch; 415 questions; pinned prompt; eraser size; smoothing strength and undo; theme color components; palette toggle; circle erase at 0.25x/1x/2x, masking and serialization. Physical Pencil and Swift Playground importer NOT tested."]
+        let result: [String: Any] = ["passed":passed, "detail":detail, "feature_checks":ciChecks, "content_checks":ciContentChecks, "scope":"Simulator build and launch; dashboard; all 415 answer bindings and answer-before-explanation order; concept and calculation screens; navigation and native bridge; pinned prompt; eraser size; smoothing strength and undo; theme color components; palette toggle; circle erase at 0.25x/1x/2x, masking and serialization. Physical Pencil and Swift Playground importer NOT tested."]
         do {
             let data = try JSONSerialization.data(withJSONObject: result, options: [.prettyPrinted, .sortedKeys])
             try data.write(to: URL.documentsDirectory.appendingPathComponent("ci-smoke.json"), options: .atomic)
@@ -156,12 +245,12 @@ def prepare():
     assert source.count(marker) == 1
     controller.write_text(source.replace(marker, HARNESS + '\n' + marker), encoding='utf-8')
     shutil.copytree(SRC / 'Resources' / 'Web', APP / 'Web', dirs_exist_ok=True)
-    for name in ('index.html', 'data.js', 'lessons.js', 'app.js', 'style.css'):
+    for name in ('index.html', 'data.js', 'lessons.js', 'answer-cards.js', 'lesson-view.js', 'app.js', 'style.css', 'modern.css', 'dashboard.css'):
         assert (APP / 'Web' / name).is_file(), name
     with (APP / 'Info.plist').open('wb') as file:
         plistlib.dump({'CFBundleIdentifier':BUNDLE, 'CFBundleExecutable':'GasPractice',
             'CFBundleName':'GasPractice', 'CFBundlePackageType':'APPL',
-            'CFBundleVersion':'4', 'CFBundleShortVersionString':'0.4',
+            'CFBundleVersion':'5', 'CFBundleShortVersionString':'0.5',
             'MinimumOSVersion':'17.5', 'UIDeviceFamily':[2],
             'UILaunchScreen':{}, 'UISupportedInterfaceOrientations':[
                 'UIInterfaceOrientationPortrait','UIInterfaceOrientationLandscapeLeft',

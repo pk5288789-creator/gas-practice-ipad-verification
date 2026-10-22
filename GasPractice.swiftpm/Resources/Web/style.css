@@ -81,3 +81,6 @@
 @media(min-width:900px) and (max-width:1199px) and (orientation:landscape){
  .study-layout{grid-template-columns:minmax(0,1fr) minmax(0,58%)}
 }
+
+/* Answer first: keep the result distinct from optional supporting details. */
+#answer .direct-answer{padding:22px 24px;margin:0 0 20px;border:2px solid #315aee;border-radius:16px;background:#fff;color:#17243d}#answer .direct-answer h3{margin:0 0 14px;color:#315aee;font-size:18px}#directAnswerText{font-size:17px;line-height:1.85;overflow-wrap:anywhere}#answer #lesson{border-top:1px solid #dce2ed;padding-top:16px}#answer #lesson>summary{font-weight:700;padding:8px 0 16px;cursor:pointer}#answer #sourceAnswer{margin-top:20px}@media(max-width:600px){#answer .direct-answer{padding:18px 16px}#directAnswerText{font-size:16px}}

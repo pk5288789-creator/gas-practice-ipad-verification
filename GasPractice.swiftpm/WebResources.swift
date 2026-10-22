@@ -19,7 +19,7 @@ enum WebResources {
         for root in roots where visited.insert(root.path).inserted {
             for folder in ["Web", "Resources/Web", ""] {
                 let directory = folder.isEmpty ? root : root.appendingPathComponent(folder)
-                let required = ["index.html", "app.js", "data.js", "lessons.js", "style.css"]
+                let required = ["index.html", "app.js", "data.js", "lessons.js", "style.css", "answer-cards.js", "lesson-view.js", "modern.css", "dashboard.css"]
                 if required.allSatisfy({ fm.fileExists(atPath: directory.appendingPathComponent($0).path) }) {
                     return directory.appendingPathComponent("index.html")
                 }

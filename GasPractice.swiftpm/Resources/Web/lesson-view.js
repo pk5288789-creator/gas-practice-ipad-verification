@@ -3,7 +3,8 @@
 window.lessonSteps = function(lesson){
   if(Array.isArray(lesson.steps)&&lesson.steps.length)return lesson.steps;
   const headings=/^(답안에 쓸 핵심(?:.*)?|왜 그런가요\??|기억할 점|사용 공식|단위 정리|적용 범위|계산과정|계산 과정|답|해설)$/;
-  const text=lesson.text.replace(/\r/g,'').replace(/([^\n])\s*([①②③④⑤⑥⑦⑧⑨⑩])/g,'$1\n\n$2');
+  const mainText=lesson.text.includes('\n답안에 쓸 핵심\n')?lesson.text.slice(lesson.text.indexOf('답안에 쓸 핵심')):lesson.text;
+  const text=mainText.replace(/\r/g,'').replace(/([^\n])\s*([①②③④⑤⑥⑦⑧⑨⑩])/g,'$1\n\n$2');
   const chunks=text.split(/\n+/).map(s=>s.trim()).filter(Boolean);
   let pending='';const steps=[];
   for(const chunk of chunks){
@@ -18,6 +19,7 @@ window.lessonSteps = function(lesson){
       else if(/^(?:답|최종|따라서|결과)/.test(body))title='결과 정리';
       else title=lesson.kind==='calculation'?(steps.length?'계산과 해석':'풀이의 출발점'):(steps.length?'원리와 기억할 점':'답안 핵심');
     }
+    title=title.replace(/^왜 그런가요\??$/,'원리').replace(/^답안에 쓸 핵심.*$/,'답안 설명');
     steps.push({title,body});
   }
   return steps;
